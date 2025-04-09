@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Secret Message Vault 🔐</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #1f1f2f;
+      --text: #fff;
+      --accent: #00bcd4;
+    }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 600px;
+    }
+    textarea, select, input, button {
+      width: 100%;
+      margin: 10px 0;
+      padding: 10px;
+      font-size: 1rem;
+      border-radius: 5px;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 8px;
+      word-break: break-word;
+    }
+    .row-actions button {
+      margin: 2px;
+      font-size: 0.8rem;
+    }
+    .theme-toggle {
+      background: #333;
+      margin-top: 20px;
+    }
+    .preview {
+      margin-top: 10px;
+      font-style: italic;
+      color: #ccc;
+    }
+    @media(max-width: 600px) {
+      table, th, td {
+        font-size: 0.9rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Secret Message Vault</h1>
+
+    <textarea id="message" maxlength="200" placeholder="Enter your secret message (max 200 chars)..."></textarea>
+    <select id="encoding">
+      <option value="binary">Binary</option>
+      <option value="base64">Base64</option>
+      <option value="caesar">Caesar Cipher</option>
+    </select>
+    <input type="number" id="shift" min="1" max="25" value="3" placeholder="Caesar Shift (1-25)" style="display:none;" />
+    <button onclick="encodeMessage()">Encode & Save</button>
+
+    <div class="preview" id="preview">Encoded preview will appear here...</div>
+
+    <input type="text" id="search" placeholder="Search messages..." oninput="renderVault()" />
+
+    <table id="vault">
+      <thead>
+        <tr>
+          <th>Original</th>
+          <th>Encoded</th>
+          <th>Type</th>
+          <th>Time</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <button onclick="clearVault()">🗑️ Clear All</button>
+    <button onclick="exportVault()">📄 Export</button>
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Toggle Theme</button>
+  </div>
+
+  <audio id="clickSound" src="https://www.soundjay.com/buttons/sounds/button-29.mp3" preload="auto"></audio>
+
+  <script>
+    const vaultKey = "vaultMessages";
+
+    document.getElementById("encoding").addEventListener("change", e => {
+      const shiftInput = document.getElementById("shift");
+      shiftInput.style.display = e.target.value === "caesar" ? "block" : "none";
+      updatePreview();
+    });
+
+    document.getElementById("message").addEventListener("input", updatePreview);
+    document.getElementById("shift").addEventListener("input", updatePreview);
+
+    function encodeMessage() {
+      const msg = document.getElementById("message").value.trim();
+      if (!msg) return alert("Please enter a message!");
+
+      const type = document.getElementById("encoding").value;
+      const shift = parseInt(document.getElementById("shift").value) || 3;
+
+      let encoded = "";
+      if (type === "binary") {
+        encoded = msg.split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join(' ');
+      } else if (type === "base64") {
+        encoded = btoa(msg);
+      } else if (type === "caesar") {
+        encoded = msg.split('').map(c =>
+          String.fromCharCode((c.charCodeAt(0) + shift - 32) % 95 + 32)
+        ).join('');
+      }
+
+      const vault = JSON.parse(localStorage.getItem(vaultKey) || '[]');
+      vault.push({ original: msg, encoded, type, time: new Date().toLocaleString() });
+      localStorage.setItem(vaultKey, JSON.stringify(vault));
+
+      document.getElementById("message").value = "";
+      document.getElementById("clickSound").play();
+      renderVault();
+      updatePreview();
+    }
+
+    function renderVault() {
+      const search = document.getElementById("search").value.toLowerCase();
+      const vault = JSON.parse(localStorage.getItem(vaultKey) || '[]');
+      const tbody = document.querySelector("#vault tbody");
+      tbody.innerHTML = "";
+
+      vault.filter(row =>
+        row.original.toLowerCase().includes(search) || row.encoded.toLowerCase().includes(search)
+      ).reverse().forEach((row, index) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.original}</td>
+          <td>${row.encoded}</td>
+          <td>${row.type}</td>
+          <td>${row.time}</td>
+          <td class="row-actions">
+            <button onclick="copyText('${row.encoded}')">📋</button>
+            <button onclick="deleteOne(${vault.length - 1 - index})">❌</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function deleteOne(index) {
+      const vault = JSON.parse(localStorage.getItem(vaultKey) || '[]');
+      vault.splice(index, 1);
+      localStorage.setItem(vaultKey, JSON.stringify(vault));
+      renderVault();
+    }
+
+    function clearVault() {
+      if (confirm("Are you sure you want to delete all messages?")) {
+        localStorage.removeItem(vaultKey);
+        renderVault();
+      }
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+      alert("Copied to clipboard!");
+    }
+
+    function exportVault() {
+      const vault = JSON.parse(localStorage.getItem(vaultKey) || '[]');
+      let content = "Original\tEncoded\tType\tTime\n";
+      vault.forEach(row => {
+        content += `${row.original}\t${row.encoded}\t${row.type}\t${row.time}\n`;
+      });
+
+      const blob = new Blob([content], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = "vault_export.txt";
+      a.click();
+    }
+
+    function updatePreview() {
+      const msg = document.getElementById("message").value.trim();
+      const type = document.getElementById("encoding").value;
+      const shift = parseInt(document.getElementById("shift").value) || 3;
+
+      let preview = "";
+      if (type === "binary") {
+        preview = msg.split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join(' ');
+      } else if (type === "base64") {
+        try { preview = btoa(msg); } catch { preview = "Invalid Base64 characters." }
+      } else if (type === "caesar") {
+        preview = msg.split('').map(c =>
+          String.fromCharCode((c.charCodeAt(0) + shift - 32) % 95 + 32)
+        ).join('');
+      }
+      document.getElementById("preview").textContent = "Preview: " + preview;
+    }
+
+    function toggleTheme() {
+      const dark = document.body.style.backgroundColor === "white";
+      if (dark) {
+        document.body.style.backgroundColor = "#1f1f2f";
+        document.body.style.color = "white";
+      } else {
+        document.body.style.backgroundColor = "white";
+        document.body.style.color = "#000";
+      }
+    }
+
+    renderVault(); // On load
+  </script>
+</body>
+</html>
